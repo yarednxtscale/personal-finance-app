@@ -75,23 +75,49 @@ async function refreshRate(force = true) {
   }
 }
 
+let refreshPromise = null;
+
+// PARALLEL_REFRESH_V1: load dashboard-critical data concurrently, then hydrate secondary data.
 async function refreshData() {
-  state.loading = true;
-  render();
-  const tables = ['accounts', 'transactions', 'categories', 'budgets', 'bills', 'savings_goals'];
-  for (const table of tables) {
-    let query = supabase.from(table).select('*');
-    if (table === 'transactions') query = query.order('transaction_date', { ascending: false }).order('created_at', { ascending: false });
-    else if (table === 'bills') query = query.order('due_date', { ascending: true });
-    else if (table === 'budgets') query = query.order('month', { ascending: false });
-    else query = query.order('created_at', { ascending: false });
-    const { data, error } = await query;
-    if (error) console.error(table, error);
-    state.data[table === 'savings_goals' ? 'goals' : table] = data || [];
-  }
-  await refreshRate(false);
-  state.loading = false;
-  render();
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    state.loading = true;
+    render();
+
+    const query = (table) => {
+      let q = supabase.from(table).select('*');
+      if (table === 'transactions') q = q.order('transaction_date', { ascending: false }).order('created_at', { ascending: false });
+      else if (table === 'bills') q = q.order('due_date', { ascending: true });
+      else if (table === 'budgets') q = q.order('month', { ascending: false });
+      else q = q.order('created_at', { ascending: false });
+      return q;
+    };
+
+    const criticalTables = ['accounts', 'transactions', 'categories', 'bills', 'savings_goals'];
+    const results = await Promise.all(
+      criticalTables.map(async (table) => {
+        const [{ data, error }] = await Promise.all([query(table), refreshRate(false)]);
+        if (error) console.error(table, error);
+        return [table, data || []];
+      })
+    );
+
+    for (const [table, data] of results) {
+      state.data[table === 'savings_goals' ? 'goals' : table] = data;
+    }
+
+    state.loading = false;
+    render();
+
+    // Budgets are not needed to render the dashboard, so hydrate them after first paint.
+    const { data: budgets, error: budgetsError } = await query('budgets');
+    if (budgetsError) console.error('budgets', budgetsError);
+    state.data.budgets = budgets || [];
+    render();
+  })().finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
 }
 
 function transactionTotals() {
@@ -211,11 +237,11 @@ function bindAuth() {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
         if (!data.session) { errorEl.innerHTML = '<div class="notice">Account created. Check your email if confirmation is required.</div>'; return; }
-        startSession(); state.session = data.session; state.user = data.user; await refreshData(); return;
+        startSession(); state.session = data.session; state.user = data.user; render(); return;
       }
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      startSession(); state.session = data.session; state.user = data.user; await refreshData();
+      startSession(); state.session = data.session; state.user = data.user; render();
     } catch (error) {
       errorEl.innerHTML = `<div class="notice">${esc(error.message || 'Unable to sign in.')}</div>`;
     }

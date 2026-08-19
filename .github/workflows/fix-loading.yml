@@ -1,0 +1,49 @@
+name: Fix Finance Hub startup loading
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - '.github/workflows/fix-loading.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch refreshData for resilient loading
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app.js')
+          s = p.read_text()
+          old = """    const criticalTables = ['accounts', 'transactions', 'categories', 'bills', 'savings_goals'];\n    const results = await Promise.all(\n      criticalTables.map(async (table) => {\n        const [{ data, error }] = await Promise.all([query(table), refreshRate(false)]);\n        if (error) console.error(table, error);\n        return [table, data || []];\n      })\n    );\n\n    for (const [table, data] of results) {\n      state.data[table === 'savings_goals' ? 'goals' : table] = data;\n    }\n"""
+          new = """    const criticalTables = ['accounts', 'transactions', 'categories', 'bills', 'savings_goals'];\n    // Fetch FX once in the background; never let it block the dashboard.\n    void refreshRate(false);\n    const withTimeout = (promise, ms) => Promise.race([\n      promise,\n      new Promise((resolve) => setTimeout(() => resolve({ data: [], error: new Error(`Timed out loading ${ms}ms`) }), ms)),\n    ]);\n    const results = await Promise.all(\n      criticalTables.map(async (table) => {\n        const { data, error } = await withTimeout(query(table), 5000);\n        if (error) console.warn(table, error);\n        return [table, data || []];\n      })\n    );\n\n    for (const [table, data] of results) {\n      state.data[table === 'savings_goals' ? 'goals' : table] = data;\n    }\n"""
+          marker = "// RESILIENT_LOADING_V2"
+          if marker in s:
+              print('Already patched')
+              raise SystemExit(0)
+          if old not in s:
+              raise SystemExit('Expected refreshData block not found')
+          s = s.replace(old, new + f"    {marker}\\n")
+          p.write_text(s)
+          PY
+
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo 'No changes needed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js
+          git commit -m 'Make Finance Hub startup loading resilient [skip ci]'
+          git push

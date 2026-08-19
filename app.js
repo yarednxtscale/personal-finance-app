@@ -94,10 +94,16 @@ async function refreshData() {
     };
 
     const criticalTables = ['accounts', 'transactions', 'categories', 'bills', 'savings_goals'];
+    // Fetch FX once in the background; never let it block the dashboard.
+    void refreshRate(false);
+    const withTimeout = (promise, ms) => Promise.race([
+      promise,
+      new Promise((resolve) => setTimeout(() => resolve({ data: [], error: new Error(`Timed out loading ${ms}ms`) }), ms)),
+    ]);
     const results = await Promise.all(
       criticalTables.map(async (table) => {
-        const [{ data, error }] = await Promise.all([query(table), refreshRate(false)]);
-        if (error) console.error(table, error);
+        const { data, error } = await withTimeout(query(table), 5000);
+        if (error) console.warn(table, error);
         return [table, data || []];
       })
     );
@@ -105,7 +111,7 @@ async function refreshData() {
     for (const [table, data] of results) {
       state.data[table === 'savings_goals' ? 'goals' : table] = data;
     }
-
+    // RESILIENT_LOADING_V2\n
     state.loading = false;
     render();
 

@@ -1,0 +1,115 @@
+name: Optimize Finance Hub loading
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  optimize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch core loading path
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('app.js')
+          text = path.read_text(encoding='utf-8')
+          marker = 'PARALLEL_REFRESH_V1'
+          if marker in text:
+              print('Already optimized; nothing to do.')
+              raise SystemExit(0)
+
+          old_refresh = '''async function refreshData() {
+            state.loading = true;
+            render();
+            const tables = ['accounts', 'transactions', 'categories', 'budgets', 'bills', 'savings_goals'];
+            for (const table of tables) {
+              let query = supabase.from(table).select('*');
+              if (table === 'transactions') query = query.order('transaction_date', { ascending: false }).order('created_at', { ascending: false });
+              else if (table === 'bills') query = query.order('due_date', { ascending: true });
+              else if (table === 'budgets') query = query.order('month', { ascending: false });
+              else query = query.order('created_at', { ascending: false });
+              const { data, error } = await query;
+              if (error) console.error(table, error);
+              state.data[table === 'savings_goals' ? 'goals' : table] = data || [];
+            }
+            await refreshRate(false);
+            state.loading = false;
+            render();
+          }'''
+
+          new_refresh = '''let refreshPromise = null;
+
+          // PARALLEL_REFRESH_V1: load dashboard-critical data concurrently, then hydrate secondary data.
+          async function refreshData() {
+            if (refreshPromise) return refreshPromise;
+            refreshPromise = (async () => {
+              state.loading = true;
+              render();
+
+              const query = (table) => {
+                let q = supabase.from(table).select('*');
+                if (table === 'transactions') q = q.order('transaction_date', { ascending: false }).order('created_at', { ascending: false });
+                else if (table === 'bills') q = q.order('due_date', { ascending: true });
+                else if (table === 'budgets') q = q.order('month', { ascending: false });
+                else q = q.order('created_at', { ascending: false });
+                return q;
+              };
+
+              const criticalTables = ['accounts', 'transactions', 'categories', 'bills', 'savings_goals'];
+              const results = await Promise.all(
+                criticalTables.map(async (table) => {
+                  const [{ data, error }] = await Promise.all([query(table), refreshRate(false)]);
+                  if (error) console.error(table, error);
+                  return [table, data || []];
+                })
+              );
+
+              for (const [table, data] of results) {
+                state.data[table === 'savings_goals' ? 'goals' : table] = data;
+              }
+
+              state.loading = false;
+              render();
+
+              // Budgets are not needed to render the dashboard, so hydrate them after first paint.
+              const { data: budgets, error: budgetsError } = await query('budgets');
+              if (budgetsError) console.error('budgets', budgetsError);
+              state.data.budgets = budgets || [];
+              render();
+            })().finally(() => {
+              refreshPromise = null;
+            });
+            return refreshPromise;
+          }'''
+
+          if old_refresh not in text:
+              raise SystemExit('Expected refreshData block not found; refusing to make a risky patch.')
+          text = text.replace(old_refresh, new_refresh, 1)
+
+          text = text.replace('startSession(); state.session = data.session; state.user = data.user; await refreshData(); return;', 'startSession(); state.session = data.session; state.user = data.user; render(); return;', 1)
+          text = text.replace('startSession(); state.session = data.session; state.user = data.user; await refreshData();\n    } catch', 'startSession(); state.session = data.session; state.user = data.user; render();\n    } catch', 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Commit optimization
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Optimize Finance Hub startup loading"
+          git push

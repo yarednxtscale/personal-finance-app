@@ -35,7 +35,7 @@ public class MainActivity extends Activity {
         webView.getSettings().setDisplayZoomControls(false);
         webView.getSettings().setLoadsImagesAutomatically(true);
         webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
-        webView.getSettings().setUserAgentString(webView.getSettings().getUserAgentString() + " FinanceHubAndroid/1.0");
+        webView.getSettings().setUserAgentString(webView.getSettings().getUserAgentString() + " FinanceHubAndroid/1.1");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override

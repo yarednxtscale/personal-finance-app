@@ -1,0 +1,28 @@
+name: Validate Finance Hub
+
+on:
+  push:
+    branches: [agent/mobile-ux-package]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Syntax check custom JS
+        run: |
+          node --check management-ui.js
+          node --check income-tab.js
+          node --check mobile-ui.js
+          node --check mobile-nav.js
+          node --check debt-navigation-v3.js
+          node --check trash-bin.js
+      - run: npm run build

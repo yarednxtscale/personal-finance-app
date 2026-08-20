@@ -1,0 +1,3 @@
+.nav{display:flex;flex-direction:column;min-height:0;}
+.nav .nav-section-title{flex:0 0 auto;}
+.nav button[data-trash-bin]{margin-top:auto !important;order:999 !important;}

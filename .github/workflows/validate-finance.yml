@@ -13,16 +13,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm install
+      - run: npm install --no-audit --no-fund
       - name: Syntax check custom JS
         run: |
+          node --check app.js
           node --check management-ui.js
           node --check mobile-ui.js
           node --check mobile-nav.js
+          node --check income-tab.js
           node --check debt-navigation-v3.js
           node --check trash-bin.js
+          node --check available-balance.js
+          node --check dashboard-current-totals.js
       - run: npm run build

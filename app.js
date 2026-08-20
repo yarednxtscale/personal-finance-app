@@ -85,7 +85,7 @@ async function refreshData() {
     render();
 
     const query = (table) => {
-      let q = supabase.from(table).select('*');
+      let q = supabase.from(table).select('*').eq('is_deleted', false);
       if (table === 'transactions') q = q.order('transaction_date', { ascending: false }).order('created_at', { ascending: false });
       else if (table === 'bills') q = q.order('due_date', { ascending: true });
       else if (table === 'budgets') q = q.order('month', { ascending: false });

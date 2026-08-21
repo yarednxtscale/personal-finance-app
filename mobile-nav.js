@@ -64,3 +64,5 @@ function setup(){
 const observer=new MutationObserver(setup);
 observer.observe(document.body,{childList:true,subtree:true});
 setup();
+
+import('./ui-stability-selection.js').catch(console.error);

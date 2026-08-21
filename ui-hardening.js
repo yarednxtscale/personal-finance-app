@@ -131,16 +131,24 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-const observer = new MutationObserver(() => {
-  if (organizing) return;
-  window.clearTimeout(observer.timer);
-  observer.timer = window.setTimeout(() => {
-    hardenOverlays();
-    const nav = document.querySelector('.sidebar .nav');
-    if (!nav) return;
-    if (navSignature(nav) !== lastSignature) organizeSidebar();
-  }, 120);
-});
-observer.observe(document.body, { childList: true, subtree: true });
+let rootObserver = null;
+function attachRootObserver() {
+  const root = document.getElementById('root');
+  if (!root || rootObserver) return;
+  rootObserver = new MutationObserver(() => {
+    window.clearTimeout(rootObserver.timer);
+    rootObserver.timer = window.setTimeout(run, 50);
+  });
+  rootObserver.observe(root, { childList: true });
+}
+
+const bootstrapTimer = window.setInterval(() => {
+  attachRootObserver();
+  if (document.querySelector('.sidebar .nav')) {
+    run();
+    window.clearInterval(bootstrapTimer);
+  }
+}, 50);
 
 run();
+attachRootObserver();

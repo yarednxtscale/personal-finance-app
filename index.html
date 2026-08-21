@@ -43,6 +43,7 @@ button,input,select{font:inherit}button{cursor:pointer}
 .auth{min-height:100vh;display:grid;place-items:center;background:linear-gradient(160deg,#111827,#1f315f);padding:20px}.auth-card{width:min(430px,100%);background:#fff;border-radius:24px;padding:30px;box-shadow:0 30px 90px rgba(0,0,0,.24)}.auth-card h1{margin:0 0 6px}.auth-card p{margin:0 0 24px;color:var(--muted)}.auth-toggle{display:flex;background:#f1f3f7;border-radius:12px;padding:4px;margin-bottom:18px}.auth-toggle button{flex:1;border:0;background:transparent;padding:9px;border-radius:9px}.auth-toggle .active{background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.08);font-weight:800}.notice{padding:10px 12px;border-radius:10px;background:#fff8e7;color:#8a621d;font-size:12px}.toast{position:fixed;right:20px;bottom:20px;background:#111827;color:#fff;border-radius:12px;padding:12px 16px;z-index:50;box-shadow:var(--shadow)}.mobile-menu{display:none}
 @media(max-width:1050px){.grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}.sidebar{width:235px}}
 @media(max-width:760px){.sidebar{position:fixed;left:-270px;z-index:30;transition:left .2s;width:258px;height:100dvh}.sidebar.open{left:0}.main{padding:18px;padding-bottom:calc(28px + env(safe-area-inset-bottom))}.mobile-menu{display:inline-flex}.grid-4,.grid-3,.grid-2,.form-grid{grid-template-columns:1fr}.topbar h1{font-size:22px}.hide-mobile{display:none}.table-wrap{margin-inline:-4px}.card{padding:16px;border-radius:16px}.nav-section-title{padding-top:12px}}
+#mobile-nav-backdrop:not(.open){display:none!important;pointer-events:none!important}
 </style>
 </head>
 <body><div id="root"></div>
@@ -53,4 +54,5 @@ button,input,select{font:inherit}button{cursor:pointer}
 <script type="module" src="/income-tab.js"></script>
 <script type="module" src="/settings-csv-launcher.js"></script>
 <script type="module" src="/trash-bin.js"></script>
+<script type="module" src="/ui-hardening.js"></script>
 </body></html>

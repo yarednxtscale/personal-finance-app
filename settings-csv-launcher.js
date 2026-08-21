@@ -31,3 +31,5 @@ const addImportButton = () => {
 const observer = new MutationObserver(addImportButton);
 observer.observe(document.body, { childList: true, subtree: true });
 addImportButton();
+
+import('/finance-ui-finalizer.js').catch((error) => console.error('Finance UI finalizer failed to load', error));

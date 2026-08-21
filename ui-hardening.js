@@ -17,79 +17,96 @@ const NAV_ORDER = [
 ];
 
 const norm = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+let organizing = false;
+let lastSignature = '';
 
 function hardenOverlays() {
   const backdrop = document.getElementById('mobile-nav-backdrop');
-  if (backdrop) {
-    const open = backdrop.classList.contains('open');
-    backdrop.style.pointerEvents = open ? 'auto' : 'none';
-    backdrop.style.display = open ? 'block' : 'none';
-  }
+  if (!backdrop) return;
+  const open = backdrop.classList.contains('open');
+  backdrop.style.pointerEvents = open ? 'auto' : 'none';
+  backdrop.style.display = open ? 'block' : 'none';
+}
+
+function navSignature(nav) {
+  return [...nav.querySelectorAll('button')].map((button) => {
+    const key = norm(button.textContent);
+    const role = button.dataset.mx || button.dataset.incomeTab || button.dataset.trashBin || button.dataset.nav || '';
+    return `${key}:${role}`;
+  }).join('|');
 }
 
 function organizeSidebar() {
   const nav = document.querySelector('.sidebar .nav');
-  if (!nav) return;
-  if (nav.dataset.hardened === '1') return;
+  if (!nav || organizing) return;
+
+  const signature = navSignature(nav);
+  if (signature && signature === lastSignature && nav.dataset.hardened === '1') return;
 
   const buttons = [...nav.querySelectorAll('button')];
   const byText = new Map();
   for (const button of buttons) {
     const key = norm(button.textContent);
     if (!key || byText.has(key)) continue;
-    // Prefer management controls for enhanced pages; keep the native app controls for core pages.
-    const preferred = button.dataset.mx || button.dataset.incomeTab || button.dataset.trashBin;
-    byText.set(key, { button, preferred: Boolean(preferred) });
+    byText.set(key, button);
   }
 
   const preferredByText = new Map();
   for (const button of buttons) {
     const key = norm(button.textContent);
     if (!key) continue;
-    if (button.dataset.mx || button.dataset.incomeTab || button.dataset.trashBin) preferredByText.set(key, button);
+    if (button.dataset.mx || button.dataset.incomeTab || button.dataset.trashBin) {
+      preferredByText.set(key, button);
+    }
   }
 
-  const chosen = new Map();
-  for (const [key, value] of byText) chosen.set(key, value.button);
+  const chosen = new Map(byText);
   for (const [key, button] of preferredByText) chosen.set(key, button);
 
-  nav.querySelectorAll('.ui-hardening-section').forEach((el) => el.remove());
-  const fragment = document.createDocumentFragment();
-  const used = new Set();
+  organizing = true;
+  try {
+    nav.querySelectorAll('.ui-hardening-section').forEach((el) => el.remove());
+    const fragment = document.createDocumentFragment();
+    const used = new Set();
 
-  for (const [kind, label] of NAV_ORDER) {
-    const key = norm(label);
-    if (kind === 'section') {
-      const heading = document.createElement('div');
-      heading.className = 'nav-section-title ui-hardening-section';
-      heading.textContent = label;
-      fragment.appendChild(heading);
-      continue;
+    for (const [kind, label] of NAV_ORDER) {
+      const key = norm(label);
+      if (kind === 'section') {
+        const heading = document.createElement('div');
+        heading.className = 'nav-section-title ui-hardening-section';
+        heading.textContent = label;
+        fragment.appendChild(heading);
+        continue;
+      }
+
+      const button = kind === 'trash'
+        ? (nav.querySelector('[data-trash-bin]') || chosen.get(key))
+        : chosen.get(key);
+      if (!button || used.has(button)) continue;
+      used.add(button);
+      button.style.marginTop = '';
+      fragment.appendChild(button);
     }
-    const button = kind === 'trash'
-      ? (nav.querySelector('[data-trash-bin]') || chosen.get(key))
-      : chosen.get(key);
-    if (!button || used.has(button)) continue;
-    used.add(button);
-    button.style.marginTop = '';
-    fragment.appendChild(button);
-  }
 
-  // Remove every leftover duplicate button, but keep non-button children intact.
-  for (const button of buttons) {
-    if (!used.has(button)) button.remove();
-  }
-  nav.appendChild(fragment);
-  nav.dataset.hardened = '1';
+    for (const button of buttons) {
+      if (!used.has(button)) button.remove();
+    }
 
-  nav.style.gap = '3px';
-  nav.style.overflowY = 'auto';
-  nav.style.overflowX = 'hidden';
+    nav.appendChild(fragment);
+    nav.dataset.hardened = '1';
+    nav.style.gap = '3px';
+    nav.style.overflowY = 'auto';
+    nav.style.overflowX = 'hidden';
 
-  const trash = nav.querySelector('[data-trash-bin]');
-  if (trash) {
-    trash.style.marginTop = 'auto';
-    trash.style.flexShrink = '0';
+    const trash = nav.querySelector('[data-trash-bin]');
+    if (trash) {
+      trash.style.marginTop = 'auto';
+      trash.style.flexShrink = '0';
+    }
+
+    lastSignature = navSignature(nav);
+  } finally {
+    organizing = false;
   }
 }
 
@@ -115,12 +132,13 @@ style.textContent = `
 document.head.appendChild(style);
 
 const observer = new MutationObserver(() => {
-  if (observer.timer) clearTimeout(observer.timer);
-  observer.timer = setTimeout(() => {
-    if (document.querySelector('.sidebar .nav')) {
-      document.querySelector('.sidebar .nav').dataset.hardened = '0';
-      run();
-    }
+  if (organizing) return;
+  window.clearTimeout(observer.timer);
+  observer.timer = window.setTimeout(() => {
+    hardenOverlays();
+    const nav = document.querySelector('.sidebar .nav');
+    if (!nav) return;
+    if (navSignature(nav) !== lastSignature) organizeSidebar();
   }, 120);
 });
 observer.observe(document.body, { childList: true, subtree: true });
